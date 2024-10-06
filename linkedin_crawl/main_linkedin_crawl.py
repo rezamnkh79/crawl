@@ -15,13 +15,13 @@ time.sleep(2)
 username = driver.find_element(By.ID, "username")
 
 # Enter Your Email Address
-username.send_keys("your email address")
+username.send_keys("alinoradi92@gmail.com")
 
 # Entering password
 pword = driver.find_element(By.ID, "password")
 
 # Enter Your Password
-pword.send_keys("your password")
+pword.send_keys("421844")
 
 # Clicking on the log in button
 driver.find_element(By.XPATH, "//button[@type='submit']").click()
@@ -30,7 +30,8 @@ driver.find_element(By.XPATH, "//button[@type='submit']").click()
 time.sleep(2)
 
 # Optionally, you can navigate to a profile or other pages and scrape data
-driver.get("https://www.linkedin.com/feed/")
+driver.get(
+    "https://www.linkedin.com/search/results/all/?facetGeoRegion=%5B%22us%3A0%22%5D&facetIndustry=%5B%22106%22%2C%2243%22%2C%2241%22%2C%2242%22%2C%2246%22%2C%2245%22%2C%22129%22%5D' '&keywords=ali +&origin=FACETED_SEARCH")
 time.sleep(2)
 
 # Scrape data using BeautifulSoup
