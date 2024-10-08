@@ -1,98 +1,50 @@
-#Written by Frank Lin in 2017.
-from selenium import webdriver
-from bs4 import BeautifulSoup
-import json
-import csv
+import re
 import time
-from random import randint
-from time import sleep
+
+from bs4 import BeautifulSoup
 from selenium import webdriver
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
-from selenium.common.exceptions import NoSuchElementException
-from selenium.webdriver.common.keys import Keys
-from datetime import datetime
 
+driver = webdriver.Chrome('')  # Optional argument, if not specified will search path.
+driver.get("https://linkedin.com/uas/login")
 
+# Waiting for the page to load
+time.sleep(2)
 
+# Entering usernameselenium
+username = driver.find_element(By.ID, "username")
 
+# Enter Your Email Address
+username.send_keys("alinoradi92@gmail.com")
 
-def main():
+# Entering password
+pword = driver.find_element(By.ID, "password")
 
-    username = input("Linkedin Username: ")
-    password = input("Linkedin Password: ")
-    path = input("input file: ")
-    fileName = input("output file: ")
+# Enter Your Password
+pword.send_keys("421844")
 
+# Clicking on the log in button
+driver.find_element(By.XPATH, "//button[@type='submit']").click()
 
-    chrome_options = webdriver.ChromeOptions()
-    driver = webdriver.Chrome('chromedriver', chrome_options=chrome_options)
-    #driver = webdriver.Firefox()
+# Wait for the page to load after login
+time.sleep(2)
 
+# Optionally, you can navigate to a profile or other pages and scrape data
+driver.get(
+    "https://www.linkedin.com/search/results/all/?facetGeoRegion=%5B%22us%3A0%22%5D&facetIndustry=%5B%22106%22%2C%2243%22%2C%2241%22%2C%2242%22%2C%2246%22%2C%2245%22%2C%22129%22%5D' '&keywords=ali +&origin=FACETED_SEARCH")
+time.sleep(2)
 
-    driver.get('https://www.linkedin.com/')
-    driver.set_page_load_timeout(100)
-    driver.find_element_by_name("session_key").send_keys(username)
-    driver.find_element_by_name("session_password").send_keys(password)
-    driver.find_element_by_id("login-submit").click()
+# Scrape data using BeautifulSoup
+soup = BeautifulSoup(driver.page_source, 'html.parser')
 
-
-    keyWord = ''
-    for search_pro in search_List:
-
-        search_id = search_pro[0]
-        search_first_name = search_pro[1]
-        search_last_name = search_pro[2]
-        keyWord = search_first_name + ' ' + search_last_name
-        keyWord = keyWord.replace(" ", "%20")
-
-        searchURL = 'https://www.linkedin.com/search/results/people/?facetGeoRegion=%5B%22us%3A0%22%5D&facetIndustry=%5B%22106%22%2C%2243%22%2C%2241%22%2C%2242%22%2C%2246%22%2C%2245%22%2C%22129%22%5D' '&keywords='+ keyWord + '&origin=FACETED_SEARCH'
-
-        links = []
-        page_number = 1
-
-        while True:
-            pageURL = searchURL + '&page=' + str(page_number)
-            driver.get(pageURL)
-
-            #test whether result exists
-            if driver.find_elements_by_css_selector(".search-no-results"):
-                print("no results")
-                break
-
-
-            driver.implicitly_wait(10)
-
-            i = 0
-            while i<1000:
-                scroll = driver.find_element_by_tag_name('body').send_keys(Keys.END)
-                i+=1
-
-            sleep(5)
-
-            element_present = EC.presence_of_element_located((By.CSS_SELECTOR, '.search-result__info'))
-            WebDriverWait(driver, 30).until(element_present)
-
-            results = driver.find_elements_by_css_selector(".search-result__info")
-
-            for r in results:
-                this_link = r.find_element_by_css_selector('a').get_attribute('href')
-                print(this_link)
-                if '/in/' in this_link:
-                    links.append(this_link)
-                    print("These are links:")
-                    print(this_link)
-
-            page_number += 1
-
-        for temp_link in links:
-            anchor = temp_link
-            getData(anchor, driver, search_first_name, search_last_name, search_id)
-
-
-
-
-if __name__ == '__main__':
-    main()
+# Parse the page content with BeautifulSoup
+# Find the div with the specific data-id containing "urn:li:activity:sth"
+for data in soup.find('div', {'data-id': lambda x: x and x.startswith("urn:li:activity:")}):
+    text = data.text
+    text = text.replace("\n", "").replace("         ", "")
+    # regex for arabic text
+    reg = re.compile('([\u0600-\u06FF]+(?:\s+[\u0600-\u06FF]+)*)\s*')
+    result = list(filter(None, reg.split(text)))
+    print(result)
+# Close the driver
+driver.quit()
