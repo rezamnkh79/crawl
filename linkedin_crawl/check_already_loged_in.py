@@ -1,6 +1,7 @@
 import csv
 import random
 import time
+import redis
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from bs4 import BeautifulSoup
 from selenium import webdriver
@@ -12,10 +13,13 @@ from selenium.webdriver.support.ui import WebDriverWait
 
 
 class LinkedInScraper:
-    def __init__(self, username, password):
+    def __init__(self, username, password, redis_client):
         self.username = username
         self.password = password
         self.driver = self.setup_driver()
+        self.redis_client = redis_client
+        self.is_logged_in = False
+        self.session_cookie = None
 
     def setup_driver(self):
         """Set up the Chrome options and WebDriver."""
@@ -24,12 +28,44 @@ class LinkedInScraper:
         driver = webdriver.Chrome(options=options)  # Ensure you have the ChromeDriver installed and in your PATH
         return driver
 
+    def load_session(self):
+        """Load session from Redis."""
+        session_key = f"linkedin_session:{self.username}"
+        self.session_cookie = self.redis_client.get(session_key)
+
+        if self.session_cookie:
+            self.driver.get("https://www.linkedin.com")
+            # Set the session cookie in the browser
+            self.driver.add_cookie({
+                'name': 'li_at',
+                'value': self.session_cookie.decode('utf-8'),
+                'domain': '.linkedin.com'
+            })
+            self.driver.refresh()  # Refresh to apply the cookie
+            self.check_login()  # Check if login was successful
+        else:
+            print("No session found in Redis. Proceeding to login.")
+
+    def check_login(self):
+        """Check if already logged in by looking for a specific element on the home page."""
+        try:
+            WebDriverWait(self.driver, 5).until(
+                EC.presence_of_element_located((By.ID, "global-nav-search"))
+            )
+            self.is_logged_in = True
+            print("Already logged in.")
+        except Exception:
+            print("Not logged in. Proceeding to login.")
+
     def login(self):
         """Log in to LinkedIn."""
+        if self.is_logged_in:
+            return  # Skip login if already logged in
+
         self.driver.get("https://www.linkedin.com/login")
 
         # Wait for the username input to load and enter the username
-        username_input = WebDriverWait(self.driver, 50).until(
+        username_input = WebDriverWait(self.driver, 500).until(
             EC.presence_of_element_located((By.ID, "username"))
         )
         username_input.send_keys(self.username)
@@ -47,10 +83,18 @@ class LinkedInScraper:
         login_button.click()
 
         # Wait for the home page to load
-        WebDriverWait(self.driver, 50).until(
+        WebDriverWait(self.driver, 500).until(
             EC.presence_of_element_located((By.ID, "global-nav-search"))
         )
         time.sleep(2)
+
+        # Get the session cookie and store it in Redis
+        for cookie in self.driver.get_cookies():
+            if cookie['name'] == 'li_at':
+                self.session_cookie = cookie['value']
+                session_key = f"linkedin_session:{self.username}"
+                self.redis_client.set(session_key, self.session_cookie)  # Store in Redis
+                print("Session cookie stored in Redis.")
 
     def scrape_linkedin(self, search_url):
         """Scrape LinkedIn profiles."""
@@ -122,7 +166,7 @@ class LinkedInScraper:
                     time.sleep(1)  # Wait for the modal to appear
 
                     # Click the send button in the modal
-                    send_button = WebDriverWait(self.driver, 50).until(
+                    send_button = WebDriverWait(self.driver, 10).until(
                         EC.element_to_be_clickable((By.XPATH, "//button[contains(@aria-label, 'Send now')]"))
                     )
                     send_button.click()  # Send the connection request
@@ -135,10 +179,12 @@ class LinkedInScraper:
             self.driver.quit()
 
 
-def run_scraper(username, password, search_url):
+def run_scraper(username, password, redis_client, search_url):
     """Function to create and run a LinkedIn scraper."""
-    scraper = LinkedInScraper(username, password)
-    scraper.login()
+    scraper = LinkedInScraper(username, password, redis_client)
+    scraper.load_session()  # Load session from Redis
+    if not scraper.is_logged_in:
+        scraper.login()  # Log in if not already logged in
     scraper.scrape_linkedin(search_url)
     scraper.connect_to_new_people()
 
@@ -149,6 +195,9 @@ if __name__ == '__main__':
     password_str = "42184433"
     search_url = "https://www.linkedin.com/search/results/people/?facetGeoRegion=%5B%22us%3A0%22%5D&facetIndustry=%5B%22106%22%2C%2243%22%2C%2241%22%2C%2242%22%2C%2246%22%2C%2245%22%2C%22129%22%5D&keywords=ali&origin=FACETED_SEARCH"
 
+    # Create a Redis client
+    redis_client = redis.Redis(host='localhost', port=6379, db=0)
+
     # Number of threads
     num_threads = 1
 
@@ -156,7 +205,7 @@ if __name__ == '__main__':
     with ThreadPoolExecutor(max_workers=num_threads) as executor:
         futures = []
         for i in range(num_threads):
-            futures.append(executor.submit(run_scraper, username_str, password_str, search_url))
+            futures.append(executor.submit(run_scraper, username_str, password_str, redis_client, search_url))
 
         # Wait for all threads to complete
         for future in as_completed(futures):
