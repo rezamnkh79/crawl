@@ -103,12 +103,12 @@ def scrape_linkedin(username, password, search_url):
 
 if __name__ == '__main__':
     # LinkedIn credentials and search URL
-    username_str = "alinoradi92@gmail.com"
+    username_str = "alizade200095@gmail.com"
     password_str = "42184433"
     search_url = "https://www.linkedin.com/search/results/people/?facetGeoRegion=%5B%22us%3A0%22%5D&facetIndustry=%5B%22106%22%2C%2243%22%2C%2241%22%2C%2242%22%2C%2246%22%2C%2245%22%2C%22129%22%5D&keywords=ali&origin=FACETED_SEARCH"
 
     # Number of threads
-    num_threads = 6
+    num_threads = 1
 
     # Create a ThreadPoolExecutor.
     with ThreadPoolExecutor(max_workers=num_threads) as executor:
