@@ -10,6 +10,7 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
+from selenium_stealth import stealth
 
 
 class LinkedInScraper:
@@ -22,10 +23,22 @@ class LinkedInScraper:
         self.session_cookie = None
 
     def setup_driver(self):
-        """Set up the Chrome options and WebDriver."""
+        """Set up the Chrome options and WebDriver with stealth mode."""
         options = Options()
         options.headless = False  # Set to True to run in headless mode
+        options.add_argument("--disable-blink-features=AutomationControlled")
+
         driver = webdriver.Chrome(options=options)  # Ensure you have the ChromeDriver installed and in your PATH
+
+        stealth(driver,
+                languages=["en-US", "en"],
+                vendor="Google Inc.",
+                platform="Win32",
+                webgl_vendor="Intel Inc.",
+                renderer="Intel Iris OpenGL Engine",
+                fix_hairline=True,
+                )
+
         return driver
 
     def load_session(self):
@@ -89,7 +102,6 @@ class LinkedInScraper:
 
     def scrape_profiles(self):
         """Navigate to My Network page and scrape profiles."""
-        # self.driver.get("https://www.linkedin.com/mynetwork/grow/?skipRedirect=true")
         self.driver.get(
             "https://www.linkedin.com/search/results/people/?keywords=data scientist&origin=SWITCH_SEARCH_VERTICAL&searchId=faf8d963-0e13-4129-b722-41f5f9ffae8c&sid=4Co")
         time.sleep(5)  # Wait for the page to load
