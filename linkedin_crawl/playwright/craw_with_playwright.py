@@ -105,8 +105,8 @@ class LinkedInBot:
             # Perform any further actions after logging in or restoring session
             # For example, you could navigate to some LinkedIn pages
 
-            # Close the browser
-            browser.close()
+            # # Close the browser
+            # browser.close()
 
 
 # Example usage

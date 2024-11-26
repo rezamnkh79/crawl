@@ -215,7 +215,8 @@ class LinkedInBot:
             print(f"Error scraping profile: {e}")
         finally:
             # Close the profile tab and switch back to the main tab
-            profile_page.close()
+            # profile_page.close()
+            pass
 
     def write_profile_to_csv(self, profile_data):
         """Write scraped profile data to a CSV file (implement this method)."""
