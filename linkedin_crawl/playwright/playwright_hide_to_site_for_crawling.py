@@ -1,6 +1,8 @@
 import json
 import random
 import time
+from time import sleep
+
 import redis
 from playwright.sync_api import sync_playwright
 
@@ -18,13 +20,17 @@ class WebBot:
         self.username = username
         self.password = password
         self.login_url = login_url
-        self.timeout = 1000000
+        self.timeout = 100000000
         self.home_url = home_url
         self.login_selectors = login_selectors  # Dictionary with keys: 'username', 'password', 'submit_button'
         self.redis_client = redis.StrictRedis(host=redis_host, port=redis_port, db=redis_db, decode_responses=True)
         self.redis_timeout = redis_timeout  # Session expiration time in Redis (default 20 days)
         self.base_redis_key = "linkedin_web_session"
         self.user_agent = user_agent or "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"  # Default user agent
+        self.base_linkedin_url = "https://www.linkedin.com"
+        self.groups_link = "https://www.linkedin.com/groups/"
+        self.NUM_OF_JOIN_GROUP = 4
+        self.JOIN_GROUP = False
 
     def type_with_delay(self, element, text, delay=0.1):
         """Simulate typing text with a delay between each character."""
@@ -70,7 +76,10 @@ class WebBot:
                 cookies = json.loads(session_cookies)
                 context.add_cookies(cookies)
                 # Wait for the home page to load
-                page.goto(self.home_url, timeout=100000)
+                try:
+                    page.goto(self.home_url, timeout=self.timeout)
+                except Exception as e:
+                    page.goto(self.home_url, timeout=self.timeout)
                 page.wait_for_load_state("load", timeout=self.timeout)
             else:
                 print("No session found in Redis, logging in.")
@@ -106,14 +115,119 @@ class WebBot:
 
             # Perform any further actions after logging in or restoring session
             # Example: visit a specific page
-            page.goto(self.home_url, timeout=self.timeout)
             page.wait_for_load_state("load", timeout=self.timeout)
+            time.sleep(random.randint(3, 10))
+            if self.JOIN_GROUP:
+                self.search_and_join_group(page)
+            page.wait_for_timeout(3000)
+            self.view_user_profiles_in_group(page)
+
+    def search_and_join_group(self, page):
+        """Search for the word 'AI' and join the first group/channel."""
+        print("Searching for 'AI' on LinkedIn...")
+
+        # Go to the search bar and type 'AI'
+        search_bar = page.locator('input[aria-label="Search"]')  # LinkedIn's search input
+        search_bar.fill('AI')  # Fill the search bar with the word 'AI'
+        search_bar.press('Enter')  # Simulate pressing Enter to perform the search
+
+        # Wait for search results to load
+        page.wait_for_load_state("load", timeout=self.timeout)
+
+        # Filter the search results for groups (click the "Groups" button)
+        groups_button = page.locator('button.search-reusables__filter-pill-button:has-text("Groups")')
+        groups_button.click()  # Click the "Groups" tab to filter by groups
+        page.wait_for_load_state("load", timeout=self.timeout)
+
+        # Join the first group/channel in the search results
+        # Locate all group links by targeting the <a> tags within the <span> element
+        # that contains the group information (using class selectors you provided)
+        page.wait_for_selector('ul.ZWvZNKogMiUCtfFEayDNZHUmIYUJHhnTIbbZc')
+        # Find all <li> elements with the specific class
+        group_items = page.query_selector_all('li.hfrnpHqiFIFjzRKUPdWXOHmVUInUMZAcTFUI')
+
+        num_of_joined_groups = 0
+        for group_item in group_items:
+            # Check if the "Join" button exists inside the group
+            join_button = group_item.query_selector('button.artdeco-button--secondary')
+            if join_button:
+                print("Join button found. Clicking to join the group.")
+                join_button.click()  # Click the join button
+                if num_of_joined_groups == self.NUM_OF_JOIN_GROUP:
+                    break
+                page.wait_for_timeout(2000)  # Wait for 2 seconds to simulate human-like interaction
+
+    def view_user_profiles_in_group(self, page):
+        page.goto(self.groups_link, timeout=self.timeout)
+        page.wait_for_selector("ul.artdeco-list")
+
+        # Find all the groups on the page
+        groups = page.query_selector_all("li.artdeco-list__item")
+
+        # Loop through the groups and extract relevant details
+        group_details = []
+        groups_links = []
+        for group in groups:
+            group_info = {}
+
+            # Extract group name and link
+            group_name = group.query_selector("div.artdeco-entity-lockup__title")
+            if group_name:
+                group_info['name'] = group_name.inner_text().strip()
+                if group_name.query_selector("a") is not None:
+                    group_info['link'] = group_name.query_selector("a").get_attribute("href")
+                    groups_links.append(str(group_name.query_selector("a").get_attribute("href")))
+
+            # Extract the number of members
+            group_metadata = group.query_selector("div.artdeco-entity-lockup__metadata")
+            if group_metadata:
+                group_info['members'] = group_metadata.inner_text().strip()
+
+            # Extract the image URL
+            group_image = group.query_selector("img")
+            if group_image:
+                group_info['image_url'] = group_image.get_attribute("src")
+
+            if group_info:
+                group_details.append(group_info)
+        for link in groups_links:
+            page.goto(self.base_linkedin_url + link, timeout=self.timeout)
+            page.wait_for_load_state("load", timeout=self.timeout)
+            page.goto(self.base_linkedin_url + link + 'members/', timeout=self.timeout)
+            # Find user profile links in the group (you may need to adjust this locator)
+            user_links = page.locator('a[href*="/in/"]')  # This will select profile links in the group
+
+            # Get all the user profile URLs (up to a limit of 10)
+            user_profiles = user_links.all_inner_texts()[:10]
+            page.wait_for_selector("ul.artdeco-list")
+
+            # Find all the groups on the page
+            users_list = page.query_selector_all("a.ember-view")
+            for profile in users_list[1:]:
+                print(f"Visiting user profile: {profile.get_attribute('href')}")
+                # should change.
+                # profile_link = page.locator(f'a[href*="{profile}"]')
+                # profile_link.click()
+
+
+                # Optionally, you can add a delay to observe the action or perform other tasks
+                page.wait_for_timeout(5000)
+                # Wait for the profile page to load
+                page.goto(self.base_linkedin_url + profile.get_attribute('href'), timeout=self.timeout)
+                print(f"Visited profile: {profile}")
+                # TODO change click on button
+                page.wait_for_selector('button.artdeco-button.artdeco-button--2.artdeco-button--primary')
+
+                # Locate the button using class names and click it
+                connect_button = page.locator('button.artdeco-button.artdeco-button--2.artdeco-button--primary')
+                connect_button.click()
+                page.go_back()  # Go back to the group after viewing the profile
 
 
 # Example usage
 if __name__ == "__main__":
     # Define your bot configuration for the site you're working with
-    username = "alimardan200095@gmail.com"
+    username = "mohamadi200095@gmail.com"
     password = "42184433"
     login_url = "https://www.linkedin.com/login"  # URL of the login page
     home_url = "https://www.linkedin.com/feed/"  # URL of the home page after login
